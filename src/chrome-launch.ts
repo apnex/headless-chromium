@@ -137,15 +137,27 @@ function makeLaunchFolder(name: string): string {
  */
 const chromeEnv = (folder: string): Record<string, string | undefined> => ({ ...process.env, TMPDIR: folder, XDG_CONFIG_HOME: path.join(folder, "config") });
 
+/** How long a launch folder's removal is tried, at most, before the warden is left to remove it once the starter ends. */
+const LAUNCH_FOLDER_REMOVAL_MS = 15000;
+
 /**
  * Removes a launch folder, with every process still naming it -- the crash handlers, which leave Chrome's group -- and,
- * once it is gone, takes it back from the warden, so nothing later standing at its path is removed; never throws.
+ * once it is gone, takes it back from the warden, so nothing later standing at its path is removed. A process no stop
+ * reaches -- a crash handler outside Chrome's group, whose rewritten title names the folder in no way processesNaming
+ * finds -- may still be writing into it, and one removal then fails, its retries sweeping the folder only once; so it is
+ * tried again, what names the folder stopped again and the folder removed, until it is gone or the bound has passed,
+ * when the warden still holds it. Answers whether it is gone; never throws.
  */
-async function removeLaunchFolder(folder: string): Promise<void> {
-	try {
-		await removeScratchFolder(folder);
-	} catch {
-		// removed already: nothing is left to take back
+async function removeLaunchFolder(folder: string): Promise<boolean> {
+	for (const until = Date.now() + LAUNCH_FOLDER_REMOVAL_MS; ; ) {
+		try {
+			if (await removeScratchFolder(folder)) return true;
+		} catch {
+			// removed and taken back already: nothing is left at the path
+			return true;
+		}
+		if (Date.now() >= until) return false;
+		await sleep(100);
 	}
 }
 
@@ -249,7 +261,7 @@ export async function dumpDom(url: string, options: DumpDomOptions = {}): Promis
 			child = spawnTethered(chrome, [...CHROME_FLAGS, ...args, `--user-data-dir=${path.join(folder, "profile")}`, `--virtual-time-budget=${budget}`, "--dump-dom", url], {
 				env: chromeEnv(folder),
 				stdio: ["ignore", fd, "ignore"],
-				});
+			});
 		} finally {
 			fs.closeSync(fd);
 		}

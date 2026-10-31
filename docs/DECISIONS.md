@@ -87,3 +87,28 @@ The README's `--test-force-exit` advice is gone here as in `clean-runner`; the o
 
 **Why.**\
 A third of what was shared is the Chrome family's alone, and a project whose tests drive no browser should not take a browser driver to run clean.
+
+---
+
+## D4 - A launch folder's removal is tried again until the folder is gone
+
+**Ruled by:** the director, 2026-10-31 (the release run of `v0.1.0`, which made no release).\
+**Affects:** `src/chrome-launch.ts`, `test/contract/chrome-launch.test.js`, `test/fixtures/fake-chrome.mjs` and `CONTRACT.md` (HC1 rules 5 and 6, `dumpDom`, I9).
+
+**Ruling.**\
+The release run on the tag `v0.1.0` failed one test on GitHub's runner, the launch of a Chrome that exits before writing its port, or never writes one: a launch folder, `ch-XXXXXX`, was left when the launch was refused.\
+The launcher removed each launch folder once, with clean-runner's `removeScratchFolder`, and set aside its answer; a removal that answered `false` left the folder to the warden, removed only when the starter ended.\
+Now every removal of a launch folder -- `close()`, a refused launch, `dumpDom` and a launch whose tether could not start -- calls `removeScratchFolder` again, which stops what names the folder again and removes it, until it answers `true` or 15 seconds have passed, when the warden still holds the folder; the call answers only then.
+
+**Why a removal fails.**\
+A process no stop reaches can still be writing into the folder: a crash handler, which leaves Chrome's group, and whose title Chrome rewrites so that it names the folder followed by a space, which `processesNaming` does not count as a path's end.\
+Measured: clean-runner's removal, `rmSync` with ten retries, sweeps the folder's entries once and then retries only the folder itself, so a writer active during that one sweep -- for 300 ms, for one second or for three -- made it fail with `ENOTEMPTY` every time, after 5.5 seconds; one removal after the writer had stopped succeeded.
+
+**How it is held.**\
+The fake Chrome, given `FAKE_CHROME_LATE`, leaves such a writer as it ends: detached into a session of its own, its environment and working folder naming nothing of the launch folder, its title naming it only followed by a space, filling the folder for 1.5 seconds and ending only once it has begun.\
+Before the change, its test failed: the refused launch of a Chrome that exits left its launch folder; a probe of the four paths over the same build found each leaving its folder, answering after 5.7 to 6.1 seconds.\
+After it, the test passes, and the probe found each folder gone when the call answered, after 6.6 to 7.0 seconds: the first removal failing on the writer, the second succeeding.
+
+**For clean-runner's next release (draw's `B438`).**\
+`removeScratchFolder` should itself try again within a bound, stopping what names the folder and sweeping its entries anew on each try, since its removal's retries sweep only once; and `processesNaming` should count a space as a path's end, the candidate already held there, so a process whose title Chrome rewrote is found and stopped.\
+Until then this component holds the retry, through clean-runner's public surface alone.

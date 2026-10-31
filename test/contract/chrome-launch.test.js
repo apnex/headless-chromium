@@ -181,6 +181,34 @@ test("HC1: a Chrome that exits before writing its port, or never writes one, is 
 	assert.deepEqual(processesNaming(FAKE_CHROME), [], "and the silent Chrome is stopped");
 });
 
+test("HC1: a launch folder a late writer still fills when it is first removed -- a crash handler no stop reaches -- is gone before a failed launch is refused, a Chrome is closed or dumpDom answers", { ...TEST, timeout: 180000 }, async () => {
+	const marks = scratchFolder("late-marks-");
+	const cases = [
+		["a Chrome that exits before writing its port", "exit", () => assert.rejects(launchChrome({ chrome: FAKE_CHROME }), { message: /^launchChrome: Chrome exited before it wrote its debugging port/ })],
+		["a Chrome that writes no port in time", "silent", () => assert.rejects(launchChrome({ chrome: FAKE_CHROME, startTimeoutMs: 400 }), { message: /^launchChrome: Chrome wrote no debugging port/ })],
+		["a Chrome closed", "serve", async () => (await launchChrome({ chrome: FAKE_CHROME })).close()],
+		["a dumpDom", "dump", async () => assert.match(await dumpDom("about:blank", { chrome: FAKE_CHROME }), /fake about:blank/)],
+	];
+	for (const [what, mode, act] of cases) {
+		// short enough for Chrome's lock socket, beside this run's folder
+		const tmp = privateTmp();
+		try {
+			const seen = new Set(fs.readdirSync(marks));
+			await withEnv({ TMPDIR: tmp, FAKE_CHROME_MODE: mode, FAKE_CHROME_LATE: "1500", FAKE_CHROME_LATE_MARK: marks }, act);
+			assert.deepEqual(fs.readdirSync(tmp), [], `${what}: its launch folder is gone when the call answers`);
+			// control: a late writer was left, and filled that launch folder while it was being removed
+			assert.ok(await until(() => fs.readdirSync(marks).some((n) => !seen.has(n)), 5000), `${what}: control: a late writer was left`);
+			const mark = JSON.parse(fs.readFileSync(path.join(marks, fs.readdirSync(marks).find((n) => !seen.has(n))), "utf8"));
+			assert.equal(path.dirname(mark.folder), tmp, `${what}: control: it wrote into the launch folder`);
+			assert.ok(mark.wrote > 0, `${what}: control: it wrote ${mark.wrote} files`);
+		} finally {
+			// the late writer, if a removal left it writing, is given its time before its folder goes
+			await sleep(1600);
+			fs.rmSync(tmp, { recursive: true, force: true });
+		}
+	}
+});
+
 test("HC1: a temporary folder too long for Chrome's lock socket is refused before Chrome is started", TEST, async () => {
 	const long = path.join(scratchFolder("cl-"), "a-folder-name-long-enough-to-push-a-lock-socket-past-the-limit-of-it");
 	fs.mkdirSync(long);
