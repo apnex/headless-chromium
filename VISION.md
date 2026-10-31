@@ -1,6 +1,6 @@
 # headless-chromium - Vision
 
-**Status: drafted at the split, 2026-10-31, for `0.1.0`, under draw's ruling `H26-19` as amended again; it awaits the director's ratification, and until then binds nothing; enduring once ratified.**\
+**Status: ratified by the director as written, 2026-11-01 (`D5` in this repository's `docs/DECISIONS.md`, under draw's ruling `H26-19` as amended again); enduring.**\
 This document states why headless-chromium exists and what it will never be.\
 It carries no current state, no roadmap, and no schedule.
 

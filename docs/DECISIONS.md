@@ -112,3 +112,17 @@ After it, the test passes, and the probe found each folder gone when the call an
 **For clean-runner's next release (draw's `B438`).**\
 `removeScratchFolder` should itself try again within a bound, stopping what names the folder and sweeping its entries anew on each try, since its removal's retries sweep only once; and `processesNaming` should count a space as a path's end, the candidate already held there, so a process whose title Chrome rewrote is found and stopped.\
 Until then this component holds the retry, through clean-runner's public surface alone.
+
+---
+
+## D5 - The vision is ratified as written
+
+**Ruled by:** the director, 2026-11-01.\
+**Affects:** `VISION.md`.
+
+**Ruling.**\
+`VISION.md`, drafted at the split for the first release, is ratified as written: its north star, why it exists, what it is and is not, what success means, and its authority.\
+It is enduring from today; a change of direction is recorded here as a decision first and absorbed into it afterwards.
+
+**Why.**\
+Until ratified it bound nothing, so nothing held the component to its one duty; it states what the component already does, and what draw's `H26-19`, amended again, split it out to be.
