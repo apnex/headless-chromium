@@ -1,0 +1,42 @@
+{
+  "name": "@apnex/headless-chromium",
+  "version": "0.1.0",
+  "description": "Drive headless Chromium for a test: a Chrome on a port the system gives it, in a folder of its own, a DevTools session with trusted input and focus loss, and a static server -- each gone without a trace when closed or when whatever started it dies.",
+  "license": "MIT",
+  "author": "apnex",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apnex/headless-chromium.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.4"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "VISION.md",
+    "CONTRACT.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node tools/clean-dist.mjs && tsc -p .",
+    "prepack": "npm run build",
+    "test": "npm run build && clean-runner run \"test/**/*.test.js\"",
+    "gate": "npm test && node tools/check-vocabulary.mjs && node tools/check-source.mjs && node tools/check-runtime.mjs && node tools/check-export-map.mjs && node tools/check-public-text.mjs && node tools/check-style.mjs",
+    "consumer": "node tools/consumer-test.mjs"
+  },
+  "dependencies": {
+    "@apnex/clean-runner": "https://github.com/apnex/clean-runner/releases/download/v0.2.0/apnex-clean-runner-0.2.0.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  }
+}
