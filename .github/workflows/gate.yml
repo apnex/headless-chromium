@@ -1,0 +1,60 @@
+# The gate (the four components', kept here): `npm run gate` on every push and pull request, on Node 22 and
+# Node 24, then the consumer test on Node 22.
+#
+# The workflow runs `npm run gate` rather than listing its steps, so it cannot drift from package.json.
+# The gate runs its tests under clean-runner's runner, a runtime dependency, so a test that leaves a file, a folder or a
+# process fails the job; among them are real-Chrome tests, which launch the runner's own google-chrome --
+# or $CHROME -- headless in a folder of its own and drive it with trusted input over the DevTools protocol.
+# The runner's temporary folder is the runner's /tmp, short enough for Chrome's lock socket. mission-kit's
+# style checks are fetched, never copied:
+# mission-kit is checked out at HEAD and MISSION_KIT points at it, so an upstream change can turn this
+# repository red with no commit here.
+name: gate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    # a backstop: a hang fails the job rather than holding a runner for hours
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: fetch the style rules (mission-kit at HEAD)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: apnex/mission-kit
+          path: .mission-kit
+      - run: npm run gate
+        env:
+          MISSION_KIT: ${{ github.workspace }}/.mission-kit
+
+  # The package as a project receives it: packed, installed into an empty project as a development
+  # dependency, imported by name in Node 22, and Chrome driven through it under clean-runner's runner.
+  consumer:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run consumer

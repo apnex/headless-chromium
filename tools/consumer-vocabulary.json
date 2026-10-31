@@ -1,0 +1,26 @@
+{
+  "about": "One list per consumer of headless-chromium whose words its source must not hold: draw's, as the four shared parts' vocabulary checks refuse it on behalf of their first consumer, and input-tester's, the parts' second. Test data: never in src/, never in a release. A word headless-chromium genuinely needs is allowed by its exact text, in the one file named, here and in docs/DECISIONS.md, never by loosening the match.",
+  "lists": {
+    "draw": [
+      "node",
+      "link",
+      "zone",
+      "pipe",
+      "waypoint",
+      "device",
+      "diagram",
+      "anchor",
+      "glyph",
+      "spawner",
+      "transit",
+      "layout",
+      "junction",
+      "drawv2"
+    ],
+    "input-tester": [
+      "keyboard",
+      "keycap"
+    ]
+  },
+  "allowed": []
+}

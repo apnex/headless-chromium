@@ -1,0 +1,22 @@
+{
+  "package": "@apnex/headless-chromium",
+  "paths": {
+    ".": {
+      "exports": {
+        "findChrome": { "part": "headless-chromium", "serves": ["chrome-launch"] },
+        "launchChrome": { "part": "headless-chromium", "serves": ["chrome-launch"] },
+        "dumpDom": { "part": "headless-chromium", "serves": ["chrome-launch"] },
+        "lockSocketWarning": { "part": "headless-chromium", "serves": ["chrome-launch"] },
+        "isLockFolderName": { "part": "headless-chromium", "serves": ["chrome-launch"] },
+        "connectToPage": { "part": "headless-chromium", "serves": ["devtools-session"] },
+        "BUTTON_NAMES": { "part": "headless-chromium", "serves": ["trusted-input"] },
+        "BUTTON_BITS": { "part": "headless-chromium", "serves": ["trusted-input"] },
+        "heldButtonName": { "part": "headless-chromium", "serves": ["trusted-input"] },
+        "mouseEventParams": { "part": "headless-chromium", "serves": ["trusted-input"] },
+        "loseFocus": { "part": "headless-chromium", "serves": ["trusted-input"] },
+        "serveStatic": { "part": "headless-chromium", "serves": ["static-server"] }
+      }
+    }
+  },
+  "deferred": {}
+}
