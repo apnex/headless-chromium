@@ -131,7 +131,7 @@ Until ratified it bound nothing, so nothing held the component to its one duty; 
 
 ## D6 - 0.2.0: a start bound that fits GitHub's runner, and a start that says how long it took
 
-**Ruled by:** the director, 2026-11-06 (draw's `H27`, carried out as draw's `H27.2`, `B448`).\
+**Ruled by:** the director, 2026-11-07 (draw's `H27`, carried out as draw's `H27.2`, `B448`).\
 **Affects:** `src/chrome-launch.ts`, `test/contract/chrome-launch.test.js`, `test/contract/returned-values-and-errors.test.js`, `test/contract/public-surface.test.js`, `test/fixtures/fake-chrome.mjs`, `test/types/`, `CONTRACT.md` (HC1 and its rule 5, I1), `README.md`, and `package.json` and its lockfile; a minor release, `0.2.0`.
 
 **Ruling.**\
