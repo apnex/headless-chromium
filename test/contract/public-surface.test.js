@@ -30,9 +30,9 @@ test("HC5: the export map names the package, its one path and every export, each
 	for (const entry of Object.values(map.paths["."].exports)) assert.equal(entry.part, "headless-chromium");
 });
 
-test("HC5: the package is @apnex/headless-chromium 0.1.0, for the runtime's version 22.4 and later, its one runtime dependency clean-runner 0.2.0 pinned to its release file, its two development dependencies pinned exactly", () => {
+test("HC5: the package is @apnex/headless-chromium 0.2.0, for the runtime's version 22.4 and later, its one runtime dependency clean-runner 0.2.0 pinned to its release file, its two development dependencies pinned exactly", () => {
 	assert.equal(pkg.name, "@apnex/headless-chromium");
-	assert.equal(pkg.version, "0.1.0");
+	assert.equal(pkg.version, "0.2.0");
 	assert.equal(pkg.type, "module");
 	assert.equal(pkg.license, "MIT");
 	assert.deepEqual(pkg.engines, { node: ">=22.4" }, "the version from which the runtime holds a global WebSocket");

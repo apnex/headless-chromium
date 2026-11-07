@@ -5,9 +5,11 @@
 //   serve (the default) -- as Chrome does: makes its lock folder directly in its temporary folder, named with the
 //     leading dot unless FAKE_CHROME_LOCK is "undotted", points the profile's SingletonSocket at the socket file in
 //     it, starts a crash handler of its own -- detached into a session of its own, as Chrome's leaves Chrome's group
-//     -- listens on a free port and writes it to DevToolsActivePort, and runs until stopped;
+//     -- listens on a free port and writes it to DevToolsActivePort, and runs until stopped; with FAKE_CHROME_DELAY
+//     set to a number of milliseconds it writes the port only that long after it started, as a slow start does;
 //   exit -- exits at once with code 3, writing no port;
 //   silent -- runs until stopped, writing no port;
+//   hung -- runs, writing no port, and ignores SIGTERM, as a hung Chrome does: only SIGKILL ends it;
 //   dump -- writes a document to standard output and exits 0, as --dump-dom does, having first written the file
 //     FAKE_CHROME_MARK names, when it names one, so a test knows the moment it ends;
 //   dump-fail -- exits 1 having written nothing.
@@ -73,7 +75,8 @@ if (mode === "dump") {
 }
 if (mode === "dump-fail") process.exit(1);
 setInterval(() => {}, 1000);
-if (mode === "silent") {
+if (mode === "hung") process.on("SIGTERM", () => {});
+if (mode === "silent" || mode === "hung") {
 	// nothing more: no port is written
 } else {
 	fs.mkdirSync(profile, { recursive: true });
@@ -84,8 +87,11 @@ if (mode === "silent") {
 	const handler = spawn("sleep", ["607"], { detached: true, stdio: "ignore" });
 	handler.unref();
 	const server = http.createServer((req, res) => res.end("[]"));
+	const delay = Number(process.env.FAKE_CHROME_DELAY ?? 0);
 	server.listen(0, "127.0.0.1", () => {
-		fs.writeFileSync(path.join(profile, "DevToolsActivePort"), `${server.address().port}\n/devtools/browser/fake\n`);
-		process.stdout.write(`fake chrome ${JSON.stringify({ lock, handler: handler.pid })}\n`);
+		setTimeout(() => {
+			fs.writeFileSync(path.join(profile, "DevToolsActivePort"), `${server.address().port}\n/devtools/browser/fake\n`);
+			process.stdout.write(`fake chrome ${JSON.stringify({ lock, handler: handler.pid })}\n`);
+		}, delay);
 	});
 }

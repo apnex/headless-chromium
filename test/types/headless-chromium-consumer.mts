@@ -11,6 +11,8 @@ export async function consume(): Promise<void> {
 	const found: string | null = findChrome();
 	const chrome: LaunchedChrome = await launchChrome({ url: "about:blank", args: ["--window-size=800,600"], ...(found === null ? {} : { chrome: found }) });
 	const port: number = chrome.port;
+	const startMs: number = chrome.startMs;
+	void startMs;
 	const exited = chrome.exited();
 	if (exited !== null) void [exited.code, exited.signal];
 	const page: PageSession = await connectToPage(port, { commandTimeoutMs: 1000 });

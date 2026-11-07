@@ -63,7 +63,7 @@ export interface ChromeOptions {
 	readonly profile?: string;
 	/** The Chrome to start; findChrome() by default. */
 	readonly chrome?: string;
-	/** How long Chrome may take to write its port, in milliseconds; 20000 by default. */
+	/** How long Chrome may take to write its port, in milliseconds; 60000 by default. */
 	readonly startTimeoutMs?: number;
 }
 
@@ -72,6 +72,8 @@ export interface LaunchedChrome {
 	readonly pid: number;
 	/** The debugging port the system gave Chrome. */
 	readonly port: number;
+	/** How long Chrome's start took: the milliseconds from its spawn to its debugging port read. */
+	readonly startMs: number;
 	/** The launch folder: Chrome's temporary folder, holding its lock folder and, unless one was given, its profile. */
 	readonly folder: string;
 	/** Chrome's profile. */
@@ -137,6 +139,30 @@ function makeLaunchFolder(name: string): string {
  */
 const chromeEnv = (folder: string): Record<string, string | undefined> => ({ ...process.env, TMPDIR: folder, XDG_CONFIG_HOME: path.join(folder, "config") });
 
+/** How long launchChrome waits for Chrome to write its port by default: a cold start on GitHub's runner has taken 25 seconds. */
+const START_TIMEOUT_MS = 60000;
+
+/** How long a Chrome is given to end once asked, by SIGTERM to its group, before its group is killed by SIGKILL. */
+const STOP_GRACE_MS = 5000;
+
+/** How a Chrome exited, as a message says it. */
+const exitWords = ({ code, signal }: ExitState): string => (signal === null ? `exit code ${code}` : `signal ${signal}`);
+
+/**
+ * The error of a start that wrote no port, saying what Chrome was doing: exited, with its code or signal; or still
+ * running when the start bound passed, and then how it ended once stopped -- ending when asked, it was alive and
+ * starting slowly; needing SIGKILL, or not ending even then, it was hung.
+ */
+function startFailure(chrome: string, portFile: string, startTimeoutMs: number, startedAt: number, exitedFirst: ExitState | null, afterStop: ExitState | null): Error {
+	if (exitedFirst !== null) {
+		return new Error(`launchChrome: Chrome exited before it wrote its debugging port, ${Date.now() - startedAt} ms into the start bound of ${startTimeoutMs} ms: ${exitWords(exitedFirst)} (${chrome})`);
+	}
+	const bound = `launchChrome: Chrome wrote no debugging port to ${portFile} within the start bound of ${startTimeoutMs} ms (startTimeoutMs)`;
+	if (afterStop === null) return new Error(`${bound}; it was still running then, and did not end even when killed: hung (${chrome})`);
+	if (afterStop.signal === "SIGKILL") return new Error(`${bound}; it was still running then, and did not end within ${STOP_GRACE_MS} ms of being asked, so it was killed: hung (${chrome})`);
+	return new Error(`${bound}; it was still running then, and ended when asked (${exitWords(afterStop)}): a slow start, not a hung one (${chrome})`);
+}
+
 /** How long a launch folder's removal is tried, at most, before the warden is left to remove it once the starter ends. */
 const LAUNCH_FOLDER_REMOVAL_MS = 15000;
 
@@ -164,7 +190,7 @@ async function removeLaunchFolder(folder: string): Promise<boolean> {
 /** Stops what is left of a Chrome, waits a bounded time for its tether's exit to be seen, and removes its launch folder. */
 async function removeChrome(pid: number | undefined, folder: string, exit: Promise<unknown>): Promise<void> {
 	try {
-		if (pid !== undefined) await stopGroup(pid, 5000);
+		if (pid !== undefined) await stopGroup(pid, STOP_GRACE_MS);
 		await Promise.race([exit, sleep(2000)]);
 	} finally {
 		await removeLaunchFolder(folder);
@@ -173,20 +199,21 @@ async function removeChrome(pid: number | undefined, folder: string, exit: Promi
 
 /**
  * Starts headless Chrome, tethered to this process, in a launch folder of its own, on a debugging port the system
- * gives it, and answers once Chrome has written that port.
+ * gives it, and answers once Chrome has written that port, with how long its start took.
  */
 export async function launchChrome(options: ChromeOptions = {}): Promise<LaunchedChrome> {
 	if (options === null || typeof options !== "object") throw new TypeError("launchChrome: options must be an object");
 	const { args, chrome } = readCommonOptions("launchChrome", options);
 	if (options.url !== undefined && typeof options.url !== "string") throw new TypeError("launchChrome: url must be a string");
 	if (options.profile !== undefined && (typeof options.profile !== "string" || options.profile === "")) throw new TypeError("launchChrome: profile must be a path");
-	const startTimeoutMs = readTimeout("launchChrome", "startTimeoutMs", options.startTimeoutMs, 20000);
+	const startTimeoutMs = readTimeout("launchChrome", "startTimeoutMs", options.startTimeoutMs, START_TIMEOUT_MS);
 	const folder = makeLaunchFolder("launchChrome");
 	const profile = options.profile === undefined ? path.join(folder, "profile") : path.resolve(options.profile);
 	// a port left by an earlier Chrome on the same profile is not this one's
 	fs.rmSync(path.join(profile, "DevToolsActivePort"), { force: true });
 	let exitState: ExitState | null = null;
 	let child: ChildProcess;
+	const startedAt = Date.now();
 	try {
 		child = spawnTethered(chrome, [...CHROME_FLAGS, ...args, `--user-data-dir=${profile}`, "--remote-debugging-port=0", options.url ?? "about:blank"], {
 			env: chromeEnv(folder),
@@ -207,26 +234,31 @@ export async function launchChrome(options: ChromeOptions = {}): Promise<Launche
 	const pid = child.pid;
 	let closing: Promise<void> | null = null;
 	const close = (): Promise<void> => (closing ??= removeChrome(pid, folder, exit).catch(() => undefined));
+	const portFile = path.join(profile, "DevToolsActivePort");
 	let port = 0;
-	for (const until = Date.now() + startTimeoutMs; port === 0; ) {
+	for (const until = startedAt + startTimeoutMs; port === 0; ) {
 		if (exitState !== null) {
-			const { code, signal } = exitState as ExitState;
+			const exitedFirst = exitState as ExitState;
+			const failure = startFailure(chrome, portFile, startTimeoutMs, startedAt, exitedFirst, exitedFirst);
 			await close();
-			throw new Error(`launchChrome: Chrome exited before it wrote its debugging port: ${signal === null ? `exit code ${code}` : `signal ${signal}`} (${chrome})`);
+			throw failure;
 		}
 		try {
-			port = Number(fs.readFileSync(path.join(profile, "DevToolsActivePort"), "utf8").split("\n")[0]) || 0;
+			port = Number(fs.readFileSync(portFile, "utf8").split("\n")[0]) || 0;
 		} catch {
 			// not written yet
 		}
 		if (port !== 0) break;
 		if (Date.now() >= until) {
+			// what Chrome was doing when the bound passed: exited, or still running -- and then how it ends once stopped
+			const exitedFirst = exitState as ExitState | null;
 			await close();
-			throw new Error(`launchChrome: Chrome wrote no debugging port to ${path.join(profile, "DevToolsActivePort")} within ${startTimeoutMs} ms`);
+			throw startFailure(chrome, portFile, startTimeoutMs, startedAt, exitedFirst, exitState as ExitState | null);
 		}
 		await sleep(25);
 	}
-	return Object.freeze({ pid: pid as number, port, folder, profile, exited: () => exitState, close });
+	const startMs = Date.now() - startedAt;
+	return Object.freeze({ pid: pid as number, port, startMs, folder, profile, exited: () => exitState, close });
 }
 
 export interface DumpDomOptions {

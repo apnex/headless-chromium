@@ -1,6 +1,6 @@
 {
   "name": "@apnex/headless-chromium",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Drive headless Chromium for a test: a Chrome on a port the system gives it, in a folder of its own, a DevTools session with trusted input and focus loss, and a static server -- each gone without a trace when closed or when whatever started it dies.",
   "license": "MIT",
   "author": "apnex",

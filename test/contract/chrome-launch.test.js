@@ -57,8 +57,9 @@ test("HC1: Chrome is launched headless on the port the system gave it, in a laun
 	const chrome = await launchChrome();
 	let closed = false;
 	try {
-		assert.deepEqual(Object.keys(chrome), ["pid", "port", "folder", "profile", "exited", "close"]);
+		assert.deepEqual(Object.keys(chrome), ["pid", "port", "startMs", "folder", "profile", "exited", "close"]);
 		assert.ok(Object.isFrozen(chrome));
+		assert.ok(Number.isInteger(chrome.startMs) && chrome.startMs >= 0 && chrome.startMs < 60000, `the start took ${chrome.startMs} ms, within the default bound`);
 		assert.equal(path.dirname(chrome.folder), os.tmpdir());
 		assert.match(path.basename(chrome.folder), /^ch-[A-Za-z0-9]{6}$/);
 		assert.equal(chrome.profile, path.join(chrome.folder, "profile"));
@@ -170,22 +171,46 @@ test("HC1: findChrome answers CHROME when set, else the first Chrome on PATH, el
 	assert.equal(findChrome({ CHROME: "", PATH: bin }), path.join(bin, "google-chrome"), "an empty CHROME is unset");
 });
 
-test("HC1: a Chrome that exits before writing its port, or never writes one, is refused naming why, and its launch folder removed", TEST, async () => {
+test("HC1: a Chrome that exits before writing its port is refused naming its exit code, how long it ran and the start bound, 60000 ms by default, and its launch folder removed", TEST, async () => {
 	const before = new Set(fs.readdirSync(os.tmpdir()));
-	await withEnv({ FAKE_CHROME_MODE: "exit" }, () => assert.rejects(launchChrome({ chrome: FAKE_CHROME }), { name: "Error", message: `launchChrome: Chrome exited before it wrote its debugging port: exit code 3 (${FAKE_CHROME})` }));
+	await withEnv({ FAKE_CHROME_MODE: "exit" }, () => assert.rejects(launchChrome({ chrome: FAKE_CHROME }), { name: "Error", message: new RegExp(`^launchChrome: Chrome exited before it wrote its debugging port, \\d+ ms into the start bound of 60000 ms: exit code 3 \\(${escaped(FAKE_CHROME)}\\)$`) }));
+	await withEnv({ FAKE_CHROME_MODE: "exit" }, () => assert.rejects(launchChrome({ chrome: FAKE_CHROME, startTimeoutMs: 30000 }), { message: /^launchChrome: Chrome exited before it wrote its debugging port, \d+ ms into the start bound of 30000 ms: exit code 3 / }));
+	assert.deepEqual(fs.readdirSync(os.tmpdir()).filter((n) => !before.has(n) && n.startsWith("ch-")), [], "no launch folder is left");
+});
+
+test("HC1: a slow start is answered with how long it took; one slower than its bound is refused as a slow start, still running and ending when asked; a Chrome that never writes a port and ends when asked reads the same", TEST, async () => {
+	const before = new Set(fs.readdirSync(os.tmpdir()));
+	const slow = await withEnv({ FAKE_CHROME_MODE: "serve", FAKE_CHROME_DELAY: "1500" }, () => launchChrome({ chrome: FAKE_CHROME, startTimeoutMs: 20000 }));
+	try {
+		assert.ok(slow.startMs >= 1500 && slow.startMs < 20000, `startMs ${slow.startMs}: from the spawn to the port read, past the fake's delay`);
+		assert.ok(slow.port > 0);
+	} finally {
+		await slow.close();
+	}
+	const bound = (ms) => new RegExp(`^launchChrome: Chrome wrote no debugging port to \\S+/profile/DevToolsActivePort within the start bound of ${ms} ms \\(startTimeoutMs\\); it was still running then, and ended when asked \\((exit code \\d+|signal SIGTERM)\\): a slow start, not a hung one \\(${escaped(FAKE_CHROME)}\\)$`);
 	const started = Date.now();
-	await withEnv({ FAKE_CHROME_MODE: "silent" }, () => assert.rejects(launchChrome({ chrome: FAKE_CHROME, startTimeoutMs: 400 }), { name: "Error", message: /^launchChrome: Chrome wrote no debugging port to \S+\/profile\/DevToolsActivePort within 400 ms$/ }));
-	assert.ok(Date.now() - started < 10000);
-	const added = fs.readdirSync(os.tmpdir()).filter((n) => !before.has(n) && n.startsWith("ch-"));
-	assert.deepEqual(added, [], "no launch folder is left");
-	assert.deepEqual(processesNaming(FAKE_CHROME), [], "and the silent Chrome is stopped");
+	await withEnv({ FAKE_CHROME_MODE: "serve", FAKE_CHROME_DELAY: "5000" }, () => assert.rejects(launchChrome({ chrome: FAKE_CHROME, startTimeoutMs: 400 }), { name: "Error", message: bound(400) }));
+	await withEnv({ FAKE_CHROME_MODE: "silent" }, () => assert.rejects(launchChrome({ chrome: FAKE_CHROME, startTimeoutMs: 400 }), { name: "Error", message: bound(400) }));
+	assert.ok(Date.now() - started < 10000, "each refused at its bound, not after the grace a hung Chrome is given");
+	assert.deepEqual(fs.readdirSync(os.tmpdir()).filter((n) => !before.has(n) && n.startsWith("ch-")), [], "no launch folder is left");
+	assert.deepEqual(processesNaming(FAKE_CHROME), [], "and the Chromes are stopped");
+});
+
+test("HC1: a hung Chrome -- no port written, SIGTERM ignored -- is refused as hung, killed once the stop's grace has passed, and its launch folder removed", TEST, async () => {
+	const before = new Set(fs.readdirSync(os.tmpdir()));
+	const started = Date.now();
+	await withEnv({ FAKE_CHROME_MODE: "hung" }, () => assert.rejects(launchChrome({ chrome: FAKE_CHROME, startTimeoutMs: 400 }), { name: "Error", message: new RegExp(`^launchChrome: Chrome wrote no debugging port to \\S+/profile/DevToolsActivePort within the start bound of 400 ms \\(startTimeoutMs\\); it was still running then, and did not end within 5000 ms of being asked, so it was killed: hung \\(${escaped(FAKE_CHROME)}\\)$`) }));
+	const took = Date.now() - started;
+	assert.ok(took >= 5000 && took < 20000, `refused once SIGKILL ended it, after the grace: ${took} ms`);
+	assert.deepEqual(fs.readdirSync(os.tmpdir()).filter((n) => !before.has(n) && n.startsWith("ch-")), [], "no launch folder is left");
+	assert.deepEqual(processesNaming(FAKE_CHROME), [], "and the hung Chrome is gone");
 });
 
 test("HC1: a launch folder a late writer still fills when it is first removed -- a crash handler no stop reaches -- is gone before a failed launch is refused, a Chrome is closed or dumpDom answers", { ...TEST, timeout: 180000 }, async () => {
 	const marks = scratchFolder("late-marks-");
 	const cases = [
 		["a Chrome that exits before writing its port", "exit", () => assert.rejects(launchChrome({ chrome: FAKE_CHROME }), { message: /^launchChrome: Chrome exited before it wrote its debugging port/ })],
-		["a Chrome that writes no port in time", "silent", () => assert.rejects(launchChrome({ chrome: FAKE_CHROME, startTimeoutMs: 400 }), { message: /^launchChrome: Chrome wrote no debugging port/ })],
+		["a Chrome that writes no port in time", "silent", () => assert.rejects(launchChrome({ chrome: FAKE_CHROME, startTimeoutMs: 400 }), { message: /^launchChrome: Chrome wrote no debugging port .* a slow start, not a hung one / })],
 		["a Chrome closed", "serve", async () => (await launchChrome({ chrome: FAKE_CHROME })).close()],
 		["a dumpDom", "dump", async () => assert.match(await dumpDom("about:blank", { chrome: FAKE_CHROME }), /fake about:blank/)],
 	];

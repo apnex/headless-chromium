@@ -126,3 +126,32 @@ It is enduring from today; a change of direction is recorded here as a decision 
 
 **Why.**\
 Until ratified it bound nothing, so nothing held the component to its one duty; it states what the component already does, and what draw's `H26-19`, amended again, split it out to be.
+
+---
+
+## D6 - 0.2.0: a start bound that fits GitHub's runner, and a start that says how long it took
+
+**Ruled by:** the director, 2026-11-06 (draw's `H27`, carried out as draw's `H27.2`, `B448`).\
+**Affects:** `src/chrome-launch.ts`, `test/contract/chrome-launch.test.js`, `test/contract/returned-values-and-errors.test.js`, `test/contract/public-surface.test.js`, `test/fixtures/fake-chrome.mjs`, `test/types/`, `CONTRACT.md` (HC1 and its rule 5, I1), `README.md`, and `package.json` and its lockfile; a minor release, `0.2.0`.
+
+**Ruling.**\
+CI's gate failed four times from 2026-11-02 on `launchChrome: Chrome wrote no debugging port to .../DevToolsActivePort within 20000 ms`, each passing on a re-run: each struck at a job's first Chrome launches, on a VM where Chrome ran three to ten times slower for the whole job, a cold start already taking 10 to 15 seconds on a normal runner and 19 to 25 on the slow ones; the cause is the VM's, and nothing here removes it, so 20 seconds is a bound too tight for the runner.
+1. `startTimeoutMs`'s default, the start bound, is 60000 milliseconds, measured from Chrome's spawn.
+2. A launched Chrome answers `startMs`, the milliseconds from its spawn to its debugging port read, after `port`: `{ pid, port, startMs, folder, profile, exited, close }`.
+3. A start that wrote no port is refused saying what Chrome was doing, and naming the bound: exited -- `launchChrome: Chrome exited before it wrote its debugging port, <ms> ms into the start bound of <bound> ms: exit code <n>` or `signal <name>`; or still running when the bound passed, then judged by how it ends once stopped -- `launchChrome: Chrome wrote no debugging port to <file> within the start bound of <bound> ms (startTimeoutMs); it was still running then, and ended when asked (<exit code or signal>): a slow start, not a hung one`, or `...; it was still running then, and did not end within 5000 ms of being asked, so it was killed: hung`; each followed by the Chrome's path.
+
+**Why the stop tells slow from hung.**\
+At the bound both a slow Chrome and a hung one are running and have written no port, so the bound alone cannot tell them apart; the stop that follows can.\
+`close()` stops Chrome's group with clean-runner's `stopGroup`, SIGTERM and then, past a grace of 5000 ms, SIGKILL; the tether ends as its command ended, passing on SIGTERM, and is itself ended by the group's SIGKILL, so its exit names which ended it.\
+A Chrome alive enough to answer SIGTERM was still starting; one that needed SIGKILL was not answering at all -- as `input-tester`'s launch of 25,130 ms, the old bound and the whole grace, suggests one did.\
+A Chrome still running after the SIGKILL too is called hung, having not ended even when killed.
+
+**Choices made at build.**
+- `startMs` is measured with `Date.now()` from just before `spawnTethered` to the moment the port is read, so it includes the tether's own start, a few tens of milliseconds; the start bound is measured from the same moment.
+- The message of a Chrome that exits first keeps its beginning, `launchChrome: Chrome exited before it wrote its debugging port`, and gains how long it ran and the bound; the message of a start that ran past the bound keeps its beginning, `launchChrome: Chrome wrote no debugging port to <file> within`, and names the bound as the start bound, with `startTimeoutMs`, the option that sets it.
+- The fake Chrome gains `FAKE_CHROME_DELAY`, writing its port that long after it starts, and a mode `hung`, writing none and ignoring SIGTERM; tests hold a slow start answered with its `startMs`, a slow start and a silent Chrome past a short bound refused as slow at the bound, a hung one refused as hung after the grace, a Chrome that exits refused with its code and the default bound of 60000 ms, and `startMs` on the real Chrome.
+- `export-map.json` lists exports, not their fields, so it is unchanged; `dumpDom`, whose bound is already 60 seconds, is unchanged.
+
+**Not in this release.**\
+Draw's `B439` holds two other candidates its adopters found: `serveStatic` taking no fixed port, so `input-tester`'s site server for its operator relays a fixed port to it, and the window size, an argument each adopter must remember.\
+They are left for a later release, as the director's ruling asks only for the start bound and its report.

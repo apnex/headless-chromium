@@ -48,6 +48,7 @@ await chrome.close();
 Chrome runs in a folder of its own, `ch-XXXXXX`, which holds its lock folder and its profile; `close()` stops its whole process group and removes the folder; and if the test ends first -- before Chrome started, while it runs, or after it exited or crashed -- its tether stops Chrome and the test's warden removes the folder.\
 Chrome's crash reporter keeps its settings and reports in that folder too, so a Chrome that crashes in a test writes nothing to your own `~/.config/google-chrome/Crash Reports`.\
 A Chrome never holds the test's process open: a test that forgets to close it ends, and the run then names the Chrome its tether had to stop.\
+Chrome has 60 seconds to write its debugging port, or `startTimeoutMs` milliseconds, and `chrome.startMs` says how long its start took; a start that runs past the bound is refused saying whether Chrome exited, with its exit code, was still starting and ended when asked -- a slow start -- or did not end until it was killed -- a hung one.\
 Name a profile of your own with `profile` to keep it across launches.\
 `dumpDom(url)` loads a page in a one-shot Chrome and answers the document it settles to.
 

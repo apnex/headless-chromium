@@ -95,7 +95,7 @@ test("I8: an async function refuses by rejecting, never by throwing as it is cal
 });
 
 test("I8: a failure of the world, not of an argument, is an Error beginning with the function's name", async () => {
-	await assert.rejects(launchChrome({ chrome: "/no/such/chrome", startTimeoutMs: 5000 }), (error) => error.constructor === Error && error.message.startsWith("launchChrome: Chrome exited before it wrote its debugging port: exit code 127"));
+	await assert.rejects(launchChrome({ chrome: "/no/such/chrome", startTimeoutMs: 5000 }), (error) => error.constructor === Error && error.message.startsWith("launchChrome: Chrome exited before it wrote its debugging port, ") && error.message.includes(" ms into the start bound of 5000 ms: exit code 127 ("));
 	await assert.rejects(dumpDom("about:blank", { chrome: "/no/such/chrome" }), (error) => error.constructor === Error && error.message === "dumpDom: Chrome exited with exit code 127 (about:blank)");
 	await assert.rejects(connectToPage(9, { timeoutMs: 200 }), (error) => error.constructor === Error && error.message.startsWith("connectToPage: no page target on port 9 in time ("));
 });
